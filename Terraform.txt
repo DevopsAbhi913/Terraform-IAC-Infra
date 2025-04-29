@@ -1,0 +1,151 @@
+
+																	*****Terraform*****
+	
+	=> Open source (IaC) Infrastructure as Code 
+	=> Terraform will allow 2 types of Languages in template format : a.HCL 
+																	  b.JSON
+																	  
+	HCL template for infra setup :
+	
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+# Cofigure the aws provider
+provider "aws" {
+  region = "ap-south-1"
+}
+# Create a VPC
+resource "aws_vpc" "Avpc" {
+  cidr_block = "172.20.0.0/16"
+  enable_dns_hostnames = true
+  tags = {
+    Name = "Avpc"
+  }
+}
+# creating subnet1
+resource "aws_subnet" "subnet1" {
+  vpc_id     = aws_vpc.Avpc.id
+  cidr_block = "172.20.0.0/24"
+  availability_zone = "ap-south-1a"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "Subnet-1"
+  }
+}
+# Creating subnet2
+resource "aws_subnet" "subnet2" {
+  vpc_id     = aws_vpc.Avpc.id
+  cidr_block = "172.20.1.0/24"
+  availability_zone = "ap-south-1b"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "Subnet-2"
+  }
+}
+# Creating subnet3
+resource "aws_subnet" "subnet3" {
+  vpc_id     = aws_vpc.Avpc.id
+  cidr_block = "172.20.2.0/24"
+  availability_zone = "ap-south-1c"
+  map_public_ip_on_launch = true
+  tags = {
+    Name = "Subnet-3"
+  }
+}
+# Create and attach IGW
+resource "aws_internet_gateway" "gw" {
+  vpc_id = aws_vpc.Avpc.id
+
+  tags = {
+    Name = "gw"
+  }
+}
+# Creating a Route table for public subnets
+resource "aws_route_table" "pubrtable" {
+  vpc_id = aws_vpc.Avpc.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.gw.id
+  }
+
+  tags = {
+    Name = "pubrtable"
+  }
+}
+resource "aws_route_table_association" "pubrtbassociation1" {
+  subnet_id         = aws_subnet.subnet1.id
+  route_table_id = aws_route_table.pubrtable.id
+}
+resource "aws_route_table_association" "pubrtbassociation2" {
+  subnet_id         = aws_subnet.subnet3.id
+  route_table_id = aws_route_table.pubrtable.id
+}
+# Creating a Route table for private subnets
+resource "aws_route_table" "pvtrtable" {
+  vpc_id = aws_vpc.Avpc.id
+
+  tags = {
+    Name = "pvtrtable"
+  }
+}
+resource "aws_route_table_association" "pvtrtassociation" {
+  subnet_id         = aws_subnet.subnet2.id
+  route_table_id = aws_route_table.pvtrtable.id
+}
+#Creating security groups
+resource "aws_security_group" "mysg" {
+  name        = "mysg"
+  description = "Allow ssh inbound traffic and all outbound traffic"
+  vpc_id      = aws_vpc.Avpc.id
+  ingress {
+    from_port        = 22
+    to_port          = 22
+    protocol         = "tcp"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+  }
+
+  tags = {
+    Name = "mysg"
+  }
+}
+# Creating Key pair for Ec2
+resource "aws_key_pair" "mkey" {
+  key_name   = "mkey"
+  public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCrX/oH9jwHR3fv3pFsH8C2LgWiCBKMllcC60+kBpEfHsEtJ7BEHJQfcssW1vfKr+VyztUlGhgU4sSN9S5YpknQnPLey+KNewvswmtzXKx9Fb4viw6jmlVl5cWywZgusMXUllshqWn6s/WN9QYHm/QQ31fAys3u6BleTYonjrvyzWy8P8LrbRbEzxxI+dlDQSZU/jlDU0fUFwyIKgP/J8NhSwfC05+mS0DqbYLQfUZfvUD3UAP5fVfkeI/RA4UHijB8qY+XmO/aL+j8vEXtbP+5NUshxS+u/SuAzHc0h+5kOWkmWTHVBcCL/VAqMgmo21Yd8RYuoTUCsUNH8O3QlPTEbSq6ckBjNN71OgS1n2/j7DkwAp+DuOyU9v3p+zR5Dw+VPuBWQfnvQdQ46mBkZlybEbhk2X5GwfYzjFF4zWwhxeT1zH2i+V3yUjRCGlrLBa3tUdOnbwfgPIjiqNNTZtutN2LHAHFw3zc47X/trqAZFvpY4N3JflyuFgnbqOwCBl0= root@webserver-1"
+}
+# Creating an Instance 
+data "aws_instance" "ahserver" {
+  ami = "ami-076c6dbba59aa92e6"
+  instance_type = "t2.micro"
+  subnet_id = aws_subnet.subnet1.id
+  vpc_security_group_ids = [aws_security_group.mysg.id]
+  key_name = "mkey"
+  user_data = <<-EOF
+                #!/bin/bash
+                yum install httpd -y
+                systemctl start httpd
+                systemctl enable httpd
+                git clone https://github.com/keyspaceits/project-html-blue-website.git /var/www/html
+                EOF
+  tags = {
+   Name = "ahserver"
+   }
+ }
+
+   }
+ }
